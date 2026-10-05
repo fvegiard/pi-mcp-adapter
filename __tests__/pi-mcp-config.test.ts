@@ -25,6 +25,7 @@ describe("Pi mcp.json config sources", () => {
     piGlobal = join(home, ".pi", "agent", "mcp.json");
     piProject = join(cwd, ".pi", "mcp.json");
     vi.stubEnv("HOME", home);
+    vi.stubEnv("USERPROFILE", home);
     vi.stubEnv("PI_PACKAGE_DIR", "");
     vi.stubEnv("PI_CODING_AGENT_DIR", "");
     vi.stubEnv("PI_MCP_CONFIG_MODE", "merge");

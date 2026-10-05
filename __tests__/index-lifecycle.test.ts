@@ -2660,7 +2660,7 @@ describe("mcpAdapter session lifecycle", () => {
 
   it("reads Pi's mcp.json files only when Pi supports MCP, decided before the first config load", async () => {
     const { createMcpAdapter, default: defaultAdapter } = await import("../index.ts");
-    defaultAdapter({ ...createPi().api, registerMcpServer: vi.fn() });
+    defaultAdapter({ ...createPi().api, registerMcpServer: vi.fn(), getMcpServers: vi.fn(() => []) });
     expect(mocks.setPiMcpConfigEnabled.mock.calls).toEqual([[true]]);
     expect(mocks.setPiMcpConfigEnabled.mock.invocationCallOrder[0]).toBeLessThan(mocks.loadMcpConfig.mock.invocationCallOrder[0]!);
 
@@ -2668,7 +2668,7 @@ describe("mcpAdapter session lifecycle", () => {
     expect(mocks.setPiMcpConfigEnabled.mock.calls).toEqual([[true], [false]]);
 
     // An in-memory config reads no files, so it leaves the setting alone.
-    createMcpAdapter({ config: { mcpServers: {} } })({ ...createPi().api, registerMcpServer: vi.fn() });
+    createMcpAdapter({ config: { mcpServers: {} } })({ ...createPi().api, registerMcpServer: vi.fn(), getMcpServers: vi.fn(() => []) });
     expect(mocks.setPiMcpConfigEnabled.mock.calls).toEqual([[true], [false]]);
   });
 

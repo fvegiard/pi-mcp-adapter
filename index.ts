@@ -59,9 +59,9 @@ const INIT_WAIT_TIMEOUT_MS = 30_000;
 const INIT_FAILURE_MESSAGE_MAX_CHARS = 1_000;
 const INIT_WAIT_TIMED_OUT: unique symbol = Symbol("init-wait-timed-out");
 
-/** Pi 0.99+ has its own MCP config; on Pi 0.84–0.87, `mcp.json` is an old adapter config. */
+/** Native MCP integration requires both APIs; partial hosts use the adapter-only path. */
 function piSupportsMcp(pi: ExtensionAPI): boolean {
-  return typeof pi.registerMcpServer === "function";
+  return typeof pi.registerMcpServer === "function" && typeof pi.getMcpServers === "function";
 }
 
 /** The CallToolResult codemode scripts get from a deferred tool: its output-guarded content, the server's structuredContent, and isError on any failure. */

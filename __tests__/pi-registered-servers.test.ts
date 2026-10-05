@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   initializeMcp: vi.fn(),
   loadMcpConfig: vi.fn(),
   executeCall: vi.fn(),
+  setPiMcpConfigEnabled: vi.fn(),
 }));
 
 vi.mock("../init.ts", () => ({
@@ -23,7 +24,7 @@ vi.mock("../config.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../config.ts")>()),
   loadMcpConfig: mocks.loadMcpConfig,
   getLegacyMcpMigrationNotices: () => [],
-  setPiMcpConfigEnabled: vi.fn(),
+  setPiMcpConfigEnabled: mocks.setPiMcpConfigEnabled,
 }));
 
 vi.mock("../metadata-cache.ts", async (importOriginal) => ({
@@ -100,6 +101,7 @@ describe("servers registered with pi.registerMcpServer()", () => {
   beforeEach(() => {
     vi.resetModules();
     mocks.initializeMcp.mockReset();
+    mocks.setPiMcpConfigEnabled.mockReset();
     mocks.loadMcpConfig.mockReset().mockReturnValue({ mcpServers: {} });
     mocks.executeCall.mockReset().mockImplementation(async (state: any, _tool: string, _args: unknown, server: string) => ({
       content: [{ type: "text", text: JSON.stringify(state.config.mcpServers[server] ?? null) }],
@@ -256,5 +258,56 @@ describe("servers registered with pi.registerMcpServer()", () => {
     expect(handlers.has("mcp_servers_change")).toBe(false);
     expect(api.getMcpServers).not.toHaveBeenCalled();
     expect((await callThroughMcp(api, ctx, "plugin")).content[0].text).toBe("null");
+  });
+
+  it.each([
+    ["missing getMcpServers", "getMcpServers", undefined],
+    ["null getMcpServers", "getMcpServers", null],
+    ["non-callable getMcpServers", "getMcpServers", {}],
+    ["missing registerMcpServer", "registerMcpServer", undefined],
+    ["null registerMcpServer", "registerMcpServer", null],
+    ["non-callable registerMcpServer", "registerMcpServer", {}],
+  ])("starts configured and adapter-registered servers with %s", async (_label, method, value) => {
+    const configured = { url: "https://configured.test/mcp" };
+    const state = createState({ configured });
+    mocks.loadMcpConfig.mockReturnValue({ mcpServers: { configured } });
+    mocks.initializeMcp.mockResolvedValue(state);
+    const { default: mcpAdapter, registerMcpServer } = await import("../index.ts");
+    const { api, handlers, ctx } = createPi();
+    const getMcpServers = api.getMcpServers;
+    if (value === undefined) delete api[method];
+    else api[method] = value;
+
+    mcpAdapter(api);
+    await expect(handlers.get("session_start")?.({}, ctx)).resolves.toBeUndefined();
+    await settle();
+
+    expect(mocks.setPiMcpConfigEnabled).toHaveBeenCalledWith(false);
+    expect(mocks.setPiMcpConfigEnabled.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.loadMcpConfig.mock.invocationCallOrder[0]!);
+    expect(handlers.has("mcp_servers_change")).toBe(false);
+    expect(api.registerCommand).toHaveBeenCalledWith("mcp", expect.anything());
+    const registration = registerMcpServer({
+      pi: api, name: "plugin", definition: { url: "https://plugin.test/mcp" },
+    });
+
+    await settle();
+
+    expect(mocks.initializeMcp).toHaveBeenCalled();
+    expect(getMcpServers).not.toHaveBeenCalled();
+    expect((await callThroughMcp(api, ctx, "configured")).content[0].text)
+      .toBe(JSON.stringify(configured));
+    expect((await callThroughMcp(api, ctx, "plugin")).content[0].text)
+      .toBe(JSON.stringify({ url: "https://plugin.test/mcp", directTools: false }));
+    await registration.dispose();
+  });
+
+  it("does not suppress errors from a complete Pi MCP API", async () => {
+    const { default: mcpAdapter } = await import("../index.ts");
+    const { api, handlers, ctx } = createPi();
+    api.getMcpServers.mockImplementation(() => { throw new Error("Pi MCP registry failed"); });
+    mcpAdapter(api);
+
+    await expect(handlers.get("session_start")?.({}, ctx)).rejects.toThrow("Pi MCP registry failed");
   });
 });
